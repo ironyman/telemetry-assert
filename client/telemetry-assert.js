@@ -16,11 +16,15 @@ class Telemetry {
       console.assert(...arguments);
 
       if (this.teleAssertUrl) {
+        let fetch2;
+
         if (typeof fetch == 'undefined') {
-          var fetch = require('node-fetch');
+          fetch2 = require('node-fetch');
+        } else {
+          fetch2 = fetch;
         }
 
-        return fetch(this.teleAssertUrl, {
+        return fetch2(this.teleAssertUrl, {
           method: 'POST',
           cors: 'no-cors',
           headers: {
