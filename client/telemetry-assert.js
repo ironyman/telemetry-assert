@@ -1,5 +1,3 @@
-const { json } = require('webcrypto-core');
-
 class Telemetry {
   constructor({ owner, repo, installationId, teleAssertUrl = "https://haec.xyz/.netlify/functions/server/assert" }) {
     this.owner = owner;
