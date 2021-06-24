@@ -1,0 +1,13 @@
+{
+  "name": "example",
+  "version": "0.0.1",
+  "description": "Teleporting asserts to github.",
+  "scripts": {
+    "start": "node node.js"
+  },
+  "author": "me",
+  "license": "Apache-2.0",
+  "dependencies": {
+    "telemetry-assert": "file:.."
+  }
+}
