@@ -16,7 +16,7 @@ class Telemetry {
       console.assert(...arguments);
 
       if (this.teleAssertUrl) {
-        if (typeof module == 'undefined') {
+        if (typeof fetch == 'undefined') {
           var fetch = require('node-fetch');
         }
 
