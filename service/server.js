@@ -3,27 +3,18 @@ const express = require('express');
 const serverless = require('serverless-http');
 const fetch = require('node-fetch');
 const morgan = require('morgan');
-const { Octokit } = require("@octokit/rest");
-const { createAppAuth } = require("@octokit/auth-app");
 const crypto = require("crypto");
 const cors = require('cors');
 var escapeHtml = require('escape-html');
 
-const db = require('./db.js');
+const db = require('../lib/db');
+const github = require('../lib/github');
 
 const app = express();
 
 app.use(morgan('combined'));
 
 const router = express.Router();
-
-const corsOptions = {
-  origin: '*',
-}
-
-//allow OPTIONS on all resources
-app.options('/*', cors(corsOptions))
-app.use(cors(corsOptions));
 
 router.get('/', async (req, res) => {
   let ping = await db.PingModel.findOne({}) || new db.PingModel({ count: 0 });
@@ -65,7 +56,7 @@ router.get('/github/callback', async (req, res) => {
   let err = await user.save();
 
   let example = `
-<script src="https://raw.githubusercontent.com/ironyman/telemetry-assert/current/client/telemetry-assert.js"></script>
+<script src="https://ironyman.github.io/telemetry-assert/client/telemetry-assert.js"></script>
 <script>
   let tele = new Telemetry({
     owner: "githubusername",
@@ -73,7 +64,7 @@ router.get('/github/callback', async (req, res) => {
     installationId: ${req.query.installation_id},
     // Set teleAssertUrl to falsy to fallback to console.assert only.
     // teleAssertUrl: ""
-    );
+  });
   // calls console.assert() and creates a issue in Github repo githubusername/githubrepo.
   tele.assert(false, "hello this is a bug please fix.");
 </script>
@@ -108,93 +99,81 @@ router.post('/assert', async (req, res) => {
     .update(Buffer.from(req.body.stackTrace.join("\n")))
     .digest()
     .toString("hex");
+  
+  let stackTrace = require('../lib/privacy').strip_paths(req.body.stackTrace);
 
   let existingIssue = await db.AssertionModel
     .findOne({ id })
     .populate('user')
     .exec();
 
-  const octokit = new Octokit({
-    authStrategy: createAppAuth,
-    auth: {
-      appId: process.env.GITHUB_APP_ID,
-      privateKey: Buffer.from(process.env.GITHUB_PRIVATE_KEY, 'base64').toString('ascii'),
-      clientId: process.env.GITHUB_CLIENT_ID,
-      clientSecret: process.env.GITHUB_CLIENT_SECRET,
+  if (existingIssue) {
+    console.debug("Found existing issue", existingIssue);
+    let issue = await github.createOrUpdateIssue({
+      owner: req.body.owner,
+      repo: req.body.repo,
       installationId: req.body.installationId,
-    },
+      message: req.body.message,
+      stackTrace,
+      issueNumber: existingIssue.issueNumber,
+      count: existingIssue.count,
+    });
+    if (issue.status >= 200 && issue.status < 300) {
+      console.debug("Updated issue");
+      existingIssue.count += 1;
+      await existingIssue.save();
+      res.end(JSON.stringify({ message: 'ok' }));
+      return;
+    } else if (issue.status != 410) {
+      // If status is 410 that means the issue was deleted we'll try to recreate.
+      // Otherwise something went wrong.
+      console.debug("Failed to update existing issue in github", issue);
+      res.end(JSON.stringify({ message: "Failed to update issue" }));
+      return;
+    }
+    console.debug("Failed to find existing issue in github, recreating");
+    await existingIssue.remove();
+  }
+
+  let issue = await github.createOrUpdateIssue({
+    owner: req.body.owner,
+    repo: req.body.repo,
+    installationId: req.body.installationId,
+    message: req.body.message,
+    stackTrace,
   });
 
-  if (existingIssue === null) {
-    let issue = await octokit.rest.issues.create({
-      owner: req.body.owner,
-      repo: req.body.repo,
-      title: `Telemetry assert: ${req.body.message.substring(0, 20)}`,
-      body: `
-Message:
-${req.body.message}
-
-Stack trace:
-\`\`\`
-${req.body.stackTrace.join("\n")}
-\`\`\`
-
-Count: 1
-            `.trim(),
-    }).catch(e => {
-      console.error(e);
-      return null;
-    });
-    if (!issue) {
-      console.log("Failed to create github issue");
-      res.end(JSON.stringify({ message: "Failed to create github issue" }));
-      return;
-    }
-    let assertion = new db.AssertionModel({
-      id,
-      // file: req.body.file,
-      // stackTrace: req.body.stackTrace,
-      count: 1,
-      // issueUrl: issue.data.html_url,
-      issueNumber: issue.data.number,
-      // message: req.body.message,
-      user: user._id,
-    });
-    await assertion.save();
-  } else {
-    existingIssue.count += 1;
-    await existingIssue.save();
-    let updated = await octokit.rest.issues.update({
-      owner: req.body.owner,
-      repo: req.body.repo,
-      issue_number: existingIssue.issueNumber,
-      title: `Telemetry assert: ${req.body.message.substring(0, 20)}`,
-      body: `
-Message:
-${req.body.message}
-
-Stack trace:
-\`\`\`
-${req.body.stackTrace.join("\n")}
-\`\`\`
-
-Count: ${existingIssue.count}
-        `.trim()
-    }).catch(e => {
-      console.error(e);
-      return null;
-    });
-    if (!updated) {
-      console.log("Failed to update github issue");
-      res.end(JSON.stringify({ message: "Failed to update github issue" }));
-      return;
-    }
-    console.log(updated);
-    console.log("Updated github issue");
+  if (issue.status < 200 || issue.status >= 300 || !issue.data) {
+    console.debug("Failed to create issue", issue);
+    res.end(JSON.stringify({ message: "Failed to create issue" }));
+    return;
   }
+  
+  console.debug("Created issue");
+
+  let assertion = new db.AssertionModel({
+    id,
+    // file: req.body.file,
+    // stackTrace,
+    count: 1,
+    // issueUrl: issue.data.html_url,
+    issueNumber: issue.data.number,
+    // message: req.body.message,
+    user: user._id,
+  });
+  await assertion.save();
+
   res.end(JSON.stringify({ message: "ok" }));
 });
 
+
+const corsOptions = {
+  origin: '*',
+}
+
+//allow OPTIONS on all resources
+app.options('/*', cors(corsOptions))
+app.use(cors(corsOptions));
 app.use(express.json());
 app.use('/.netlify/functions/server', router);  // path must route to lambda
 

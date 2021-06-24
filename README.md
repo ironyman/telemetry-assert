@@ -1,14 +1,14 @@
 Make `assert` useful in production. Create a Github issue if assertion is false.
 ```
-<script src="https://raw.githubusercontent.com/ironyman/telemetry-assert/current/client/telemetry-assert.js"></script>
+<script src="https://ironyman.github.io/telemetry-assert/client/telemetry-assert.js"></script>
 <script>
   let tele = new Telemetry({
     owner: "ironyman",
     repo: "telemetry-assert",
-    installationId: 17793509,
+    installationId: 17799509,
     // Set teleAssertUrl to falsy to fallback to console.assert only.
     // teleAssertUrl: ""
-  );
+  });
   // calls console.assert() and creates a issue in Github repo ironyman/telemetry-assert.
   tele.assert(false, "hello this is a bug please fix.");
 </script>
@@ -20,7 +20,7 @@ const { Telemetry } = require('telemetry-assert');
 const tele = new Telemetry({
   owner: "ironyman",
   repo: "telemetry-assert",
-  installationId: 17793509,
+  installationId: 17799509,
   // Set teleAssertUrl to falsy to fallback to console.assert only.
   // teleAssertUrl: ""
 })

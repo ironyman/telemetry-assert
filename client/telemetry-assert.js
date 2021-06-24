@@ -1,3 +1,5 @@
+const { json } = require('webcrypto-core');
+
 class Telemetry {
   constructor({ owner, repo, installationId, teleAssertUrl = "https://haec.xyz/.netlify/functions/server/assert" }) {
     this.owner = owner;
@@ -38,8 +40,16 @@ class Telemetry {
             stackTrace: new Error().stack.split("\n"),
             message,
           }),
+        }).then(response => {
+          if (response.ok) {
+            return response.json()
+          } else {
+            console.error("Telemetry assert failed to send telemetry", response);
+            return {};
+          }
         }).catch(e => {
           console.error("Telemetry assert failed to send telemetry", e);
+          return {};
         });
       }
     }

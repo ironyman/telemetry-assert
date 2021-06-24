@@ -1,7 +1,9 @@
 const { Telemetry } = require('telemetry-assert');
 
 // You would probably hard code this.
-let installationId = Number(process.env.INSTALLATION_ID || 17793509);
+let installationId = Number(process.env.INSTALLATION_ID || 17799509);
+// For local testing.
+let teleAssertUrl = process.env.TELE_ASSERT_URL;
 
 const tele = new Telemetry({
   owner: "ironyman",
@@ -11,4 +13,8 @@ const tele = new Telemetry({
   // teleAssertUrl: ""
 })
 
-tele.assert(false, "hello this is a bug please fix.");
+if (teleAssertUrl) {
+  tele.teleAssertUrl = teleAssertUrl;
+}
+
+tele.assert(false, "hello this is a bug please fix.").then(r => console.log("assert result", r));

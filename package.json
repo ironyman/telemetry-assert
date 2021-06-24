@@ -5,7 +5,8 @@
   "main": "client/telemetry-assert.js",
   "scripts": {
     "build": "netlify-lambda build express",
-    "start": "node server-local.js"
+    "start": "node server-local.js",
+    "test": "node test/index.js"
   },
   "author": "me",
   "license": "Apache-2.0",
